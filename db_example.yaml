@@ -1,0 +1,30 @@
+dbs:
+  - db_number: 1
+    fields:
+      - name: MotorStatus
+        type: BOOL
+        offset: 0
+        bit: 0
+        value: true
+      - name: Setpoint
+        type: REAL
+        offset: 2
+        value: 42.5
+      - name: Description
+        type: STRING[20]
+        offset: 6
+        value: "Main motor"
+      - name: OperatorName
+        type: WSTRING[16]
+        offset: 28
+        value: "Jürgen Müller"
+      - name: Calibration Date
+        type: DTL
+        offset: 26
+        value: "2024-07-20 14:01:00.123123"
+  - db_number: 2
+    fields:
+      - name: Counter
+        type: DINT
+        offset: 0
+        value: 12345

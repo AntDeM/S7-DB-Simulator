@@ -1,0 +1,96 @@
+name: Create Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write # Required to create a release
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # Fetch the last 2 commits
+
+      - name: Check for version change
+        id: check_version
+        run: |
+          $changed_files = git diff --name-only HEAD~1 HEAD
+          if ($changed_files -notcontains "_version.py") {
+            Write-Output "_version.py not changed. No new release needed."
+            "should_release=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            exit 0
+          }
+
+          (Get-Content -Path _version.py -Raw) -match '__version__\s*=\s*"(.*)"'
+          $version_current = $matches[1]
+
+          (git show HEAD~1:_version.py) -match '__version__\s*=\s*"(.*)"'
+          $version_previous = $matches[1]
+
+          Write-Output "Current version: $version_current"
+          Write-Output "Previous version: $version_previous"
+
+          if ($version_current -eq $version_previous) {
+            Write-Output "Version has not changed. No new release needed."
+            "should_release=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          } else {
+            Write-Output "Version changed from $version_previous to $version_current. Proceeding with release."
+            "should_release=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
+        shell: pwsh
+
+      - name: Set up Python
+        if: steps.check_version.outputs.should_release == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python dependencies
+        if: steps.check_version.outputs.should_release == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Install NSIS
+        if: steps.check_version.outputs.should_release == 'true'
+        uses: joncloud/nsis-action@v4
+        with:
+          script-file: 'installer.nsi'
+
+      - name: Build with PyInstaller
+        if: steps.check_version.outputs.should_release == 'true'
+        run: pyinstaller plc_simulator.spec
+
+      - name: Build with NSIS
+        if: steps.check_version.outputs.should_release == 'true'
+        run: makensis installer.nsi
+
+      - name: Get Version
+        if: steps.check_version.outputs.should_release == 'true'
+        id: get_version
+        run: |
+          if ((Get-Content -Path _version.py -Raw) -match '__version__\s*=\s*"(.*)"') {
+            $version = $matches[1]
+            echo "TAG=v$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } else {
+            echo "Version not found in _version.py"
+            exit 1
+          }
+        shell: pwsh
+
+      - name: Create Release
+        if: steps.check_version.outputs.should_release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG }}
+          body_path: changelog.md
+          files: |
+            dist/plc_simulator.exe
+            PLC DB Simulator Setup.exe
