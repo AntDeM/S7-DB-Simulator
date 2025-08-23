@@ -175,7 +175,3 @@ The simulator uses a handler-based approach for file formats. To add a new file 
 
 3. **Use the New Format in the GUI**
    - The GUI will automatically use your handler when opening or saving files with your extension.
-
----
-
-**No changes to the GUI or simulator logic are needed—just add your handler and register it**
