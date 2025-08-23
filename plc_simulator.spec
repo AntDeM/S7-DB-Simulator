@@ -10,7 +10,7 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('db_config.yaml', '.'),
+        ('db_example.yaml', '.'),
         (dll_path, '.'),  # Copies the snap7.dll to the output folder
     ],
     hiddenimports=[],
