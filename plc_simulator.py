@@ -496,7 +496,7 @@ class PLCSimulator(IPlcSimulator):
         """
         Initializes the simulator from a YAML config file path.
         """
-        self.server = Server()
+        self.server = Server(False)
         self.server.stop()  # Ensure server is stopped before configuration
         self.db_definitions = self.load_config(config_path)
         self.db_data = {}
@@ -777,6 +777,7 @@ class PLCGui:
 
                 # Simplified binding, only passing the db_number
                 tree.bind('<Double-1>', lambda e, db=db_number: self.on_edit(e, db))
+                tree.bind('<Button-3>', lambda e, db=db_number: self.on_right_click(e, db))
         except Exception as e:
             traceback.print_exc()
             messagebox.showerror("UI Error", f"Failed to build tables: {e}")
@@ -995,6 +996,49 @@ class PLCGui:
             entry.destroy()
         entry.bind('<Return>', on_enter)
         entry.focus_set()
+
+    def on_right_click(self, event, db_number):
+        """
+        Handles right-click context menu for toggling boolean values.
+        """
+        tree, log_box = self.tables[db_number]
+        item = tree.identify_row(event.y)
+        if not item:
+            return
+
+        # Select the row that was right-clicked
+        tree.selection_set(item)
+
+        # Find the corresponding db_def and field
+        try:
+            db_def = next(d for d in self.db_definitions if d['db_number'] == db_number)
+            field = next(f for f in db_def['fields'] if f['name'] == item)
+        except StopIteration:
+            return
+
+        # Only show context menu for BOOL type
+        if field['type'].upper() != 'BOOL':
+            return
+
+        # Create context menu
+        context_menu = tk.Menu(tree, tearoff=0)
+        context_menu.add_command(
+            label="Toggle Value",
+            command=lambda: self.toggle_bool_value(db_number, item, field, tree, log_box)
+        )
+        context_menu.tk_popup(event.x_root, event.y_root)
+
+    def toggle_bool_value(self, db_number, item, field, tree, log_box):
+        """
+        Toggles a boolean value in the DB and updates the GUI.
+        """
+        current_val = tree.set(item, 'Value')
+        current_bool = current_val.lower() in ('true', '1', 'yes')
+        new_bool = not current_bool
+
+        self.write_value(db_number, field['offset'], field['type'], new_bool, field.get('bit'))
+        tree.set(item, 'Value', str(new_bool))
+        self.append_log(log_box, f'Toggled {item}: {current_bool} → {new_bool}')
 
     def read_value(self, db_number, offset, type_, bit=None):
         """
