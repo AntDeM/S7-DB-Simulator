@@ -1,5 +1,25 @@
 A Siemens S7 DB simulator using Snap7
 
+# Project Structure
+
+```
+S7-DB-Simulator/
+├── plc_simulator.py      # Main entry point
+├── src/
+│   ├── __init__.py       # Package exports
+│   ├── interfaces.py     # Abstract interfaces (IPlcSimulator, IConfigLoader, IConfigSaver)
+│   ├── type_handlers.py  # PLC type handlers (BOOL, BYTE, WORD, INT, REAL, STRING, etc.)
+│   ├── file_handlers.py  # File I/O handlers (YAML, CSV)
+│   ├── config_validator.py # Configuration validation
+│   ├── simulator.py      # PLCSimulator class (snap7 server)
+│   └── gui.py            # PLCGui class (Tkinter GUI)
+├── _version.py           # Version info
+├── db_example.yaml       # Example DB configuration
+├── requirements.txt      # Python dependencies
+└── installer.nsi         # NSIS installer script
+```
+
+
 # Setup
 
 pip install -r requirements.txt
@@ -116,7 +136,7 @@ db_number,name,type,offset,bit,value
 The simulator uses a handler-based approach for PLC data types. To add a new type:
 
 1. **Create a Handler Class**
-   - In `plc_simulator.py`, subclass `PlcTypeHandler` and implement the `pack`, `unpack`, and `word_length` methods.
+   - In `src/type_handlers.py`, subclass `PlcTypeHandler` and implement the `pack`, `unpack`, and `word_length` methods.
 
    ```python
    class MyNewTypeHandler(PlcTypeHandler):
@@ -132,7 +152,7 @@ The simulator uses a handler-based approach for PLC data types. To add a new typ
    ```
 
 2. **Register the Handler**
-   - Add your handler to the `PLC_TYPE_HANDLERS` dictionary:
+   - Add your handler to the `PLC_TYPE_HANDLERS` dictionary in `src/type_handlers.py`:
 
    ```python
    PLC_TYPE_HANDLERS = {
@@ -142,7 +162,7 @@ The simulator uses a handler-based approach for PLC data types. To add a new typ
    ```
 
 3. **(Optional) Handle Dynamic Types**
-   - If your type requires parameters (like `STRING[n]`), update the `get_type_handler` function to handle it.
+   - If your type requires parameters (like `STRING[n]`), update the `get_type_handler` function in `src/type_handlers.py` to handle it.
 
 ---
 
@@ -151,7 +171,7 @@ The simulator uses a handler-based approach for PLC data types. To add a new typ
 The simulator uses a handler-based approach for file formats. To add a new file format:
 
 1. **Create a File Handler Class**
-   - In `plc_simulator.py`, subclass `DbFileHandler` and implement the `load` and `save` methods.
+   - In `src/file_handlers.py`, subclass `DbFileHandler` and implement the `load` and `save` methods.
 
    ```python
    class MyFormatFileHandler(DbFileHandler):
@@ -164,7 +184,7 @@ The simulator uses a handler-based approach for file formats. To add a new file 
    ```
 
 2. **Update the File Handler Selector**
-   - Add your handler to the `get_file_handler` function:
+   - Add your handler to the `get_file_handler` function in `src/file_handlers.py`:
 
    ```python
    def get_file_handler(file_path):
