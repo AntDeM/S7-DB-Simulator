@@ -16,6 +16,7 @@ from src.file_handlers import DbFileHandler, get_file_handler
 from src.config_validator import sanity_check_config
 from src.simulator import PLCSimulator
 from src.gui import PLCGui
+from src.script_engine import ScriptEngine
 
 __all__ = [
     'IPlcSimulator',
@@ -31,4 +32,5 @@ __all__ = [
     'sanity_check_config',
     'PLCSimulator',
     'PLCGui',
+    'ScriptEngine',
 ]

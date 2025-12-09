@@ -15,6 +15,7 @@ from src.interfaces import IPlcSimulator, IConfigLoader, IConfigSaver
 from src.file_handlers import get_file_handler, CsvFileHandler
 from src.config_validator import sanity_check_config
 from src.simulator import PLCSimulator
+from src.script_engine import ScriptEngine
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,13 @@ class PLCGui:
         self.last_yaml_mtime = None
         self.file_check_interval_ms = 2000
         self.update_gui_id = None  # Track polling state
+        self.script_engine: ScriptEngine | None = None
+        self.script_log_box: tk.Text | None = None
+        self.script_path_label: ttk.Label | None = None
+        self.script_start_btn: ttk.Button | None = None
+        self.script_stop_btn: ttk.Button | None = None
         self.build_toolbar()
+        self.build_script_panel()
         self.build_ui()
         if self.simulator:
             self.update_gui()
@@ -62,6 +69,122 @@ class PLCGui:
         saveas_btn.pack(side='left', padx=2, pady=2)
         export_csv_btn = ttk.Button(toolbar, text="Export CSV", command=self.on_export_csv)
         export_csv_btn.pack(side='left', padx=2, pady=2)
+
+        # Separator
+        ttk.Separator(toolbar, orient='vertical').pack(side='left', fill='y', padx=5, pady=2)
+
+        # Script controls
+        ttk.Label(toolbar, text="Script:").pack(side='left', padx=2, pady=2)
+        load_script_btn = ttk.Button(toolbar, text="Load Script", command=self.on_load_script)
+        load_script_btn.pack(side='left', padx=2, pady=2)
+        self.script_start_btn = ttk.Button(toolbar, text="▶ Start", command=self.on_start_script, state='disabled')
+        self.script_start_btn.pack(side='left', padx=2, pady=2)
+        self.script_stop_btn = ttk.Button(toolbar, text="■ Stop", command=self.on_stop_script, state='disabled')
+        self.script_stop_btn.pack(side='left', padx=2, pady=2)
+
+    def build_script_panel(self):
+        """
+        Builds the script log panel at the bottom of the window.
+        """
+        script_frame = ttk.LabelFrame(self.root, text="Script Log")
+        script_frame.pack(fill='x', side='bottom', padx=5, pady=5)
+
+        # Script path label
+        path_frame = ttk.Frame(script_frame)
+        path_frame.pack(fill='x', padx=2, pady=2)
+        ttk.Label(path_frame, text="Loaded:").pack(side='left')
+        self.script_path_label = ttk.Label(path_frame, text="(no script loaded)", foreground='gray')
+        self.script_path_label.pack(side='left', padx=5)
+
+        # Clear log button
+        clear_btn = ttk.Button(path_frame, text="Clear Log", command=self.on_clear_script_log)
+        clear_btn.pack(side='right', padx=2)
+
+        # Script log text box
+        log_frame = ttk.Frame(script_frame)
+        log_frame.pack(fill='both', expand=True, padx=2, pady=2)
+        self.script_log_box = tk.Text(log_frame, height=6, state='disabled', bg='#1e1e1e', fg='#00ff00', font=('Consolas', 9))
+        script_vsb = ttk.Scrollbar(log_frame, orient='vertical', command=self.script_log_box.yview)
+        self.script_log_box.configure(yscrollcommand=script_vsb.set)
+        self.script_log_box.pack(side='left', fill='both', expand=True)
+        script_vsb.pack(side='right', fill='y')
+
+    def on_load_script(self):
+        """
+        Loads a script file.
+        """
+        file_path = filedialog.askopenfilename(
+            title="Select Script file",
+            filetypes=[("Script files", "*.script *.txt"), ("All files", "*.*")]
+        )
+        if not file_path:
+            return
+
+        if not self.simulator:
+            messagebox.showwarning("Warning", "Please load a DB configuration first.")
+            return
+
+        # Create script engine with log callback
+        self.script_engine = ScriptEngine(self.simulator, self.append_script_log)
+
+        if self.script_engine.load_script(file_path):
+            self.script_path_label.config(text=os.path.basename(file_path), foreground='black')
+            self.script_start_btn.config(state='normal')
+        else:
+            self.script_path_label.config(text="(load failed)", foreground='red')
+            self.script_start_btn.config(state='disabled')
+
+    def on_start_script(self):
+        """
+        Starts script execution.
+        """
+        if not self.script_engine:
+            return
+
+        if self.script_engine.start():
+            self.script_start_btn.config(state='disabled')
+            self.script_stop_btn.config(state='normal')
+            # Start polling for script completion
+            self.check_script_status()
+
+    def on_stop_script(self):
+        """
+        Stops script execution.
+        """
+        if self.script_engine:
+            self.script_engine.stop()
+
+    def check_script_status(self):
+        """
+        Periodically checks if the script has finished running.
+        """
+        if self.script_engine and self.script_engine.is_running():
+            self.root.after(100, self.check_script_status)
+        else:
+            self.script_start_btn.config(state='normal')
+            self.script_stop_btn.config(state='disabled')
+
+    def append_script_log(self, message: str):
+        """
+        Appends a message to the script log box. Thread-safe.
+        """
+        def _append():
+            if self.script_log_box:
+                self.script_log_box.config(state='normal')
+                self.script_log_box.insert('end', message + '\n')
+                self.script_log_box.see('end')
+                self.script_log_box.config(state='disabled')
+        # Schedule on main thread for thread safety
+        self.root.after(0, _append)
+
+    def on_clear_script_log(self):
+        """
+        Clears the script log box.
+        """
+        if self.script_log_box:
+            self.script_log_box.config(state='normal')
+            self.script_log_box.delete('1.0', 'end')
+            self.script_log_box.config(state='disabled')
 
     def build_ui(self):
         """
@@ -159,6 +282,9 @@ class PLCGui:
             self.current_yaml_path = file_path
             self.last_yaml_mtime = os.path.getmtime(file_path)
             logger.info("Loaded db_definitions: %s", self.db_definitions)
+            # Update script engine's simulator reference if loaded
+            if self.script_engine:
+                self.script_engine.simulator = simulator
             self.build_ui()
             self.update_gui()
         except Exception as e:
@@ -194,6 +320,9 @@ class PLCGui:
             self.db_data = simulator.db_data
             self.db_definitions = simulator.db_definitions
             logger.info("Loaded db_definitions: %s", self.db_definitions)
+            # Update script engine's simulator reference if loaded
+            if self.script_engine:
+                self.script_engine.simulator = simulator
             self.build_ui()
             self.last_yaml_mtime = os.path.getmtime(self.current_yaml_path)
             self.update_gui()  # Restart the GUI polling

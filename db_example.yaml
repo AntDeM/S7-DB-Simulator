@@ -22,6 +22,10 @@ dbs:
         type: DTL
         offset: 26
         value: "2024-07-20 14:01:00.123123"
+      - name: Counter
+        type: REAL
+        offset: 2
+        value: 0
   - db_number: 2
     fields:
       - name: Counter

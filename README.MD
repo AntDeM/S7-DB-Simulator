@@ -47,6 +47,7 @@ You can load, edit, and save DB definitions in YAML format, and export them to C
 - Live view and edit of DB values in a table.
 - Detects external changes to the loaded YAML and notifies you.
 - Export the current DBs to CSV.
+- **Scripting support** for automated DB variable operations.
 
 ### How to Use
 
@@ -54,11 +55,14 @@ You can load, edit, and save DB definitions in YAML format, and export them to C
    - Run `python plc_simulator.py` or use the built executable.
 
 2. **Toolbar Functions**
-   - **Load YAML**: Open a DB configuration YAML file.
-   - **Reload**: Reload the current YAML file (useful if edited externally).
+   - **Load DB**: Open a DB configuration YAML file.
+   - **Reload DB**: Reload the current YAML file (useful if edited externally).
    - **Save**: Save changes to the current YAML file.
    - **Save As**: Save the current DBs to a new YAML file.
    - **Export CSV**: Export the current DBs to a CSV file.
+   - **Load Script**: Load a script file for automation.
+   - **▶ Start**: Start script execution.
+   - **■ Stop**: Stop script execution.
 
 3. **Editing Values**
    - Double-click a value cell in the table to edit it.
@@ -126,6 +130,93 @@ db_number,name,type,offset,bit,value
 1,Description,STRING[20],6,,Main motor
 2,Counter,DINT,0,,12345
 ```
+
+---
+
+## Scripting
+
+The simulator supports automation through human-readable script files. Scripts allow you to automate sequences of operations on DB variables.
+
+### Script File Format
+
+Script files are plain text files (`.script` or `.txt`) with one command per line. Comments start with `#`.
+
+### Available Commands
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `SET` | Set a variable value | `SET 1.MotorStatus = true` |
+| `WAIT` | Wait for specified milliseconds | `WAIT 1000` |
+| `WAIT_UNTIL` | Wait until condition is met | `WAIT_UNTIL 1.Temperature > 50 TIMEOUT 5000` |
+| `LOOP` / `END_LOOP` | Repeat commands N times | `LOOP 3` ... `END_LOOP` |
+
+### Command Syntax
+
+#### SET
+```
+SET <db_number>.<variable_name> = <value>
+```
+Sets a DB variable to the specified value.
+- For BOOL: `true`, `false`, `1`, `0`, `yes`, `no`
+- For numeric types: integer or decimal number
+- For strings: text (quotes optional)
+
+#### WAIT
+```
+WAIT <milliseconds>
+```
+Pauses script execution for the specified time.
+
+#### WAIT_UNTIL
+```
+WAIT_UNTIL <db_number>.<variable_name> <operator> <value> [TIMEOUT <ms>]
+```
+Waits until the condition is met. Operators: `==`, `!=`, `>`, `<`, `>=`, `<=`
+
+The optional `TIMEOUT` specifies maximum wait time in milliseconds. If timeout is reached, script continues.
+
+#### LOOP / END_LOOP
+```
+LOOP <count>
+    <commands>
+END_LOOP
+```
+Repeats the enclosed commands the specified number of times. Loops can be nested.
+
+### Example Script
+
+```
+# Example PLC Simulator Script
+
+# Set initial values
+SET 1.MotorStatus = true
+SET 1.Setpoint = 25.5
+
+# Wait for 1 second
+WAIT 1000
+
+# Wait until temperature exceeds 50 (with 5 second timeout)
+WAIT_UNTIL 1.Temperature > 50 TIMEOUT 5000
+
+# Loop example - cycle 3 times
+LOOP 3
+    SET 1.Counter = 100
+    WAIT 500
+    SET 1.Counter = 200
+    WAIT 500
+END_LOOP
+
+# Final state
+SET 1.MotorStatus = false
+```
+
+### Running Scripts
+
+1. Load a DB configuration first (Load DB button)
+2. Click "Load Script" and select your script file
+3. Click "▶ Start" to begin execution
+4. Click "■ Stop" to abort execution at any time
+5. Script execution is logged with timestamps in the Script Log panel
 
 ---
 

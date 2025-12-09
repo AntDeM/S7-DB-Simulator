@@ -1,0 +1,25 @@
+# Example PLC Simulator Script
+# This script demonstrates all available commands
+
+# Set initial values
+SET 1.MotorStatus = true
+SET 1.Setpoint = 25.5
+
+# Wait for 1 second
+WAIT 1000
+
+# Wait until a condition is met (with 5 second timeout)
+WAIT_UNTIL 1.Setpoint >= 25.0 TIMEOUT 5000
+
+# Loop example - increment counter 3 times
+LOOP 3
+    SET 1.Counter = 100
+    WAIT 500
+    SET 1.Counter = 200
+    WAIT 500
+END_LOOP
+
+# Final state
+SET 1.MotorStatus = false
+
+# Script completed!
