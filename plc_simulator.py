@@ -13,6 +13,7 @@ import csv
 import re
 import traceback
 from abc import ABC, abstractmethod
+from typing import Any
 import datetime
 import yaml
 from snap7.server import Server
@@ -28,13 +29,13 @@ POLL_INTERVAL_MS = 500
 class PlcTypeHandler(ABC):
     """Abstract base class for PLC type handlers. Defines the interface for packing, unpacking, and word length."""
     @abstractmethod
-    def pack(self, value):
+    def pack(self, value) -> bytes:
         """Pack a Python value into bytes for this PLC type."""
     @abstractmethod
-    def unpack(self, data):
+    def unpack(self, data) -> Any:
         """Unpack bytes into a Python value for this PLC type."""
     @abstractmethod
-    def word_length(self):
+    def word_length(self) -> int:
         """Return the snap7 WordLen constant for this PLC type."""
 
 class BoolHandler(PlcTypeHandler):
@@ -463,6 +464,16 @@ def sanity_check_config(config): #pylint: disable=too-many-statements
 
 class IPlcSimulator(ABC):
     """Interface for PLC simulator operations."""
+    @property
+    @abstractmethod
+    def db_data(self) -> dict:
+        """Return the database data dictionary."""
+
+    @property
+    @abstractmethod
+    def db_definitions(self) -> list:
+        """Return the database definitions list."""
+
     @abstractmethod
     def read_value(self, db_number, offset, type_, bit=None):
         """Read a value from the specified DB, offset, and type."""
@@ -492,16 +503,27 @@ class PLCSimulator(IPlcSimulator):
     Simulates a Siemens S7 PLC server with DBs defined by a YAML configuration.
     Handles DB memory, reading/writing values, and snap7 server registration.
     """
+
+    @property
+    def db_definitions(self):
+        """Return the database definitions list."""
+        return self._db_definitions
+
+    @property
+    def db_data(self):
+        """Return the database data dictionary."""
+        return self._db_data
+
     def __init__(self, config_path):
         """
         Initializes the simulator from a YAML config file path.
         """
         self.server = Server(False)
         self.server.stop()  # Ensure server is stopped before configuration
-        self.db_definitions = self.load_config(config_path)
-        self.db_data = {}
+        self._db_definitions = self.load_config(config_path)
+        self._db_data = {}
         self.client_log = []
-        for db_def in self.db_definitions:
+        for db_def in self._db_definitions:
             db_number = db_def['db_number']
             size = self.calculate_db_size(db_def['fields'])
             # Create a buffer using unsigned bytes (0-255)
@@ -677,7 +699,7 @@ class PLCGui:
     """
     Tkinter GUI for viewing and editing PLC DBs. Supports loading, saving, and exporting DBs.
     """
-    def __init__(self, root, simulator: IPlcSimulator, config_loader: IConfigLoader, config_saver: IConfigSaver):
+    def __init__(self, root, simulator: IPlcSimulator | None, config_loader: IConfigLoader, config_saver: IConfigSaver):
         """
         Initializes the GUI. If a simulator is provided, loads its DBs.
         """
@@ -1044,12 +1066,16 @@ class PLCGui:
         """
         Reads a value from the simulator for display in the GUI.
         """
+        if self.simulator is None:
+            return "<no simulator>"
         return self.simulator.read_value(db_number, offset, type_, bit)
 
     def write_value(self, db_number, offset, type_, value, bit=None):
         """
         Writes a value to the simulator from the GUI.
         """
+        if self.simulator is None:
+            return
         self.simulator.write_value(db_number, offset, type_, value, bit)
 
     def update_gui(self):
