@@ -58,19 +58,15 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Install NSIS
-        if: steps.check_version.outputs.should_release == 'true'
-        uses: joncloud/nsis-action@v4
-        with:
-          script-file: 'installer.nsi'
-
       - name: Build with PyInstaller
         if: steps.check_version.outputs.should_release == 'true'
         run: pyinstaller plc_simulator.spec
 
-      - name: Build with NSIS
+      - name: Build Installer with NSIS
         if: steps.check_version.outputs.should_release == 'true'
-        run: makensis installer.nsi
+        uses: joncloud/makensis-action@v4
+        with:
+          script-file: 'installer.nsi'
 
       - name: Get Version
         if: steps.check_version.outputs.should_release == 'true'
