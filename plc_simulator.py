@@ -5,6 +5,7 @@ Starts the PLC simulator GUI application.
 
 import logging
 import tkinter as tk
+import sv_ttk
 
 import yaml
 
@@ -36,6 +37,7 @@ def start_simulator_with_gui():
     """
     root = tk.Tk()
     root.title(f"PLC DB Simulator v{__version__}")
+    sv_ttk.set_theme("light")
 
     # Start with no simulator loaded
     PLCGui(root, None, ConcreteConfigLoader(), ConcreteConfigSaver())

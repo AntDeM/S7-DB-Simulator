@@ -19,7 +19,7 @@ from src.script_engine import ScriptEngine
 
 logger = logging.getLogger(__name__)
 
-POLL_INTERVAL_MS = 500
+POLL_INTERVAL_MS = 2000  # Increased to reduce lock contention and CPU usage
 
 
 class PLCGui:
@@ -41,16 +41,17 @@ class PLCGui:
         self.last_yaml_mtime = None
         self.file_check_interval_ms = 2000
         self.update_gui_id = None  # Track polling state
+        self.gui_polling_enabled = False  # Disabled by default to reduce lock contention
         self.script_engine: ScriptEngine | None = None
         self.script_log_box: tk.Text | None = None
         self.script_path_label: ttk.Label | None = None
         self.script_start_btn: ttk.Button | None = None
         self.script_stop_btn: ttk.Button | None = None
+        self.polling_var = None  # Will be set in build_toolbar
         self.build_toolbar()
         self.build_script_panel()
         self.build_ui()
-        if self.simulator:
-            self.update_gui()
+        # GUI polling disabled by default - use Auto-refresh checkbox to enable
         self.check_file_modification()
 
     def build_toolbar(self):
@@ -72,6 +73,15 @@ class PLCGui:
 
         # Separator
         ttk.Separator(toolbar, orient='vertical').pack(side='left', fill='y', padx=5, pady=2)
+
+        # GUI Polling toggle
+        self.polling_var = tk.BooleanVar(value=self.gui_polling_enabled)
+        polling_check = ttk.Checkbutton(toolbar, text="Auto-refresh GUI", variable=self.polling_var, command=self.toggle_polling)
+        polling_check.pack(side='left', padx=2, pady=2)
+        
+        # Manual refresh button
+        refresh_btn = ttk.Button(toolbar, text="🔄 Refresh", command=self.manual_refresh)
+        refresh_btn.pack(side='left', padx=2, pady=2)
 
         # Script controls
         ttk.Label(toolbar, text="Script:").pack(side='left', padx=2, pady=2)
@@ -286,7 +296,9 @@ class PLCGui:
             if self.script_engine:
                 self.script_engine.simulator = simulator
             self.build_ui()
-            self.update_gui()
+            # Only start polling if user has it enabled
+            if self.gui_polling_enabled:
+                self.update_gui()
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load YAML: {e}")
 
@@ -325,7 +337,9 @@ class PLCGui:
                 self.script_engine.simulator = simulator
             self.build_ui()
             self.last_yaml_mtime = os.path.getmtime(self.current_yaml_path)
-            self.update_gui()  # Restart the GUI polling
+            # Only restart polling if user has it enabled
+            if self.gui_polling_enabled:
+                self.update_gui()
             messagebox.showinfo("Success", "YAML file reloaded successfully.")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to reload YAML: {e}")
@@ -421,6 +435,50 @@ class PLCGui:
                     f"The YAML file '{os.path.basename(self.current_yaml_path)}' was modified outside the application. Click Reload to update."
                 )
         self.root.after(self.file_check_interval_ms, self.check_file_modification)
+
+    def toggle_polling(self):
+        """
+        Toggles GUI auto-refresh on/off.
+        """
+        self.gui_polling_enabled = self.polling_var.get()
+        if self.gui_polling_enabled:
+            logger.info("GUI polling enabled")
+            if self.simulator:
+                self.update_gui()
+        else:
+            logger.info("GUI polling disabled")
+            if self.update_gui_id is not None:
+                try:
+                    self.root.after_cancel(self.update_gui_id)
+                except Exception:
+                    pass
+                self.update_gui_id = None
+
+    def manual_refresh(self):
+        """
+        Manually refreshes the GUI once without enabling auto-refresh.
+        """
+        if not self.simulator:
+            return
+        try:
+            for db_def in self.db_definitions:
+                db_number = db_def['db_number']
+                if db_number not in self.tables:
+                    continue
+                tree, _ = self.tables[db_number]
+                for field in db_def['fields']:
+                    name = field['name']
+                    type_ = field['type']
+                    offset = field['offset']
+                    bit = field.get('bit', None)
+                    new_val = self.read_value(db_number, offset, type_, bit)
+                    # Convert boolean to string for consistent display
+                    if type_.upper() == 'BOOL':
+                        new_val = str(bool(new_val))
+                    tree.set(name, 'Value', new_val)
+            logger.info("GUI manually refreshed")
+        except Exception as e:
+            logger.error("Error during manual refresh: %s", e)
 
     def append_log(self, log_box, message):
         """
@@ -537,6 +595,7 @@ class PLCGui:
     def update_gui(self):
         """
         Periodically updates the GUI with the latest values from the simulator.
+        Only runs if GUI polling is enabled.
         """
         # Cancel any previous polling before starting a new one
         if hasattr(self, 'update_gui_id') and self.update_gui_id is not None:
@@ -545,7 +604,7 @@ class PLCGui:
             except Exception:
                 pass
             self.update_gui_id = None
-        if not self.simulator:
+        if not self.simulator or not self.gui_polling_enabled:
             return
         try:
             for db_def in self.db_definitions:
@@ -563,7 +622,11 @@ class PLCGui:
                     if type_.upper() == 'BOOL':
                         new_val_bool = bool(new_val)
                         current_val = tree.set(name, 'Value')
-                        current_val_bool = current_val.lower() in ('true', '1', 'yes')
+                        # Handle both string and non-string values in tree
+                        if isinstance(current_val, str):
+                            current_val_bool = current_val.lower() in ('true', '1', 'yes')
+                        else:
+                            current_val_bool = bool(current_val)
                         if new_val_bool != current_val_bool:
                             tree.set(name, 'Value', str(new_val_bool))
                             self.append_log(log_box, f'Value Updated from client: {name} = {new_val_bool}')

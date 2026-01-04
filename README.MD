@@ -25,6 +25,7 @@ S7-DB-Simulator/
 pip install -r requirements.txt
 
 # Build
+
 pyinstaller plc_simulator.spec
 
 # Create the installer using NSIS
