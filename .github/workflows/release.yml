@@ -70,11 +70,35 @@ jobs:
       - name: Build Installer with NSIS
         if: steps.check_version.outputs.should_release == 'true'
         run: |
-          # Find makensis.exe (Chocolatey installs to Program Files)
-          $makensisPath = Get-ChildItem -Path "C:\Program Files*" -Filter "makensis.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
-          if (-not $makensisPath) {
-            $makensisPath = Get-ChildItem -Path "$env:ProgramFiles(x86)" -Filter "makensis.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          # Find makensis.exe - check standard installation paths first
+          $makensisPath = $null
+          $possiblePaths = @(
+            "C:\Program Files\NSIS\makensis.exe",
+            "C:\Program Files (x86)\NSIS\makensis.exe",
+            "$env:ProgramFiles\NSIS\makensis.exe",
+            "$env:ProgramFiles(x86)\NSIS\makensis.exe"
+          )
+          
+          foreach ($path in $possiblePaths) {
+            if (Test-Path $path) {
+              $makensisPath = $path
+              break
+            }
           }
+          
+          # Check PATH (faster than recursive search)
+          if (-not $makensisPath) {
+            $makensisPath = Get-Command makensis -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Source
+          }
+          
+          # Check Chocolatey installation directory
+          if (-not $makensisPath) {
+            $chocoLibPath = "$env:ChocolateyInstall\lib\nsis"
+            if (Test-Path "$chocoLibPath\tools\makensis.exe") {
+              $makensisPath = "$chocoLibPath\tools\makensis.exe"
+            }
+          }
+          
           if (-not $makensisPath) {
             Write-Error "makensis.exe not found after NSIS installation"
             exit 1
