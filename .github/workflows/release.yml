@@ -62,11 +62,26 @@ jobs:
         if: steps.check_version.outputs.should_release == 'true'
         run: pyinstaller plc_simulator.spec
 
+      - name: Install NSIS
+        if: steps.check_version.outputs.should_release == 'true'
+        run: choco install nsis -y
+        shell: pwsh
+
       - name: Build Installer with NSIS
         if: steps.check_version.outputs.should_release == 'true'
-        uses: joncloud/makensis-action@v4
-        with:
-          script-file: 'installer.nsi'
+        run: |
+          # Find makensis.exe (Chocolatey installs to Program Files)
+          $makensisPath = Get-ChildItem -Path "C:\Program Files*" -Filter "makensis.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $makensisPath) {
+            $makensisPath = Get-ChildItem -Path "$env:ProgramFiles(x86)" -Filter "makensis.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+          }
+          if (-not $makensisPath) {
+            Write-Error "makensis.exe not found after NSIS installation"
+            exit 1
+          }
+          Write-Host "Using makensis at: $makensisPath"
+          & "$makensisPath" installer.nsi
+        shell: pwsh
 
       - name: Get Version
         if: steps.check_version.outputs.should_release == 'true'
